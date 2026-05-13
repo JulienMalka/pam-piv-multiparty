@@ -37,7 +37,7 @@ maven.buildMavenPackage rec {
     export JC_CLASSIC_HOME=${javacard-sdk}/jc305u3_kit
   '';
 
-  mvnHash = "sha256-YvcAwp1rfie+iByCvXPPSxcjr7alfIrh8kbqII6LPRI=";
+  mvnHash = "sha256-VnnYkPX+yz84SCn2oDiCXWI8IDMTQf2aE2yXj9V1Jb8=";
 
   installPhase = ''
     runHook preInstall
