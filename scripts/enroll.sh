@@ -72,7 +72,7 @@ else
   start_key=010203040506070801020304050607080102030405060708
 fi
 
-for cmd in yubico-piv-tool openssl; do
+for cmd in yubico-piv-tool openssl jq; do
   command -v "$cmd" >/dev/null || { echo "error: $cmd not in PATH" >&2; exit 1; }
 done
 
@@ -108,19 +108,20 @@ yubico-piv-tool --key="$new_key" -a import-certificate -s 9a < 9a.cert.pem
 
 spki=$(openssl x509 -in 9a.cert.pem -noout -pubkey \
        | openssl pkey -pubin -outform DER | base64 -w0)
-line="${target_user}:group=${group}:spki=${spki}"
+line=$(jq -nc --arg user "$target_user" --arg group "$group" --arg spki "$spki" \
+       '{user:$user, group:$group, spki:$spki}')
 
 cat <<EOF
 
 ==> Enrolment complete.
 
-Authfile line:
+Authfile line (JSONL):
 
   ${line}
 
 Append with:
 
-  echo '${line}' | sudo tee -a /var/lib/piv-multiparty/${target_user}.map >/dev/null
+  echo '${line}' | sudo tee -a /var/lib/piv-multiparty/authfile >/dev/null
 
 Management key stored at: ${key_out}
 EOF
