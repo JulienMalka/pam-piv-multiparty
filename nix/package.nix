@@ -9,7 +9,6 @@
   yubico-piv-tool,
   openssl,
   coreutils,
-  jq,
   src,
 }:
 
@@ -48,7 +47,6 @@ rustPlatform.buildRustPackage {
           yubico-piv-tool
           openssl
           coreutils
-          jq
         ]
       }
   '';
