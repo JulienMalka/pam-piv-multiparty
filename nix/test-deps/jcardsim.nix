@@ -33,11 +33,15 @@ maven.buildMavenPackage rec {
       -Dmaven.repo.local=$out/.m2
   '';
 
+  mvnFetchExtraArgs.postBuild = ''
+    find $out/.m2 -name 'maven-metadata-local.xml' -delete
+  '';
+
   preBuild = ''
     export JC_CLASSIC_HOME=${javacard-sdk}/jc305u3_kit
   '';
 
-  mvnHash = "sha256-VnnYkPX+yz84SCn2oDiCXWI8IDMTQf2aE2yXj9V1Jb8=";
+  mvnHash = "sha256-W8HEl9ypJmsdpX1WuQUOYnacgzjuqw6gXG/XcPq5Sus=";
 
   installPhase = ''
     runHook preInstall
