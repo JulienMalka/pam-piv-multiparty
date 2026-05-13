@@ -3,7 +3,7 @@
 `piv-multiparty` is a Linux PAM module that gates an account on the cryptographic approval of **multiple distinct PIV smartcards** (e.g. YubiKeys).
 The original use case is multi-party access to sensitive systems: a sudo or a release-key operation that needs two different humans, each tapping their own card, before it proceeds.
 
-The project main advantage over using `pam_u2f` module is that to avoid tracking of physical devices, there is no way to answer two distinct FIDO credentials belong to two distinct physical devices.
+The project main advantage over using `pam_u2f` module is that to avoid tracking of physical devices, there is no way to unsure two distinct FIDO credentials belong to two distinct physical devices.
 
 ## 🔧 How to build
 
