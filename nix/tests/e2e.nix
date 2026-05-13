@@ -55,7 +55,7 @@
 
       security.pam.multiparty = {
         enable = true;
-        groupOrder = [
+        groups = [
           "A"
           "B"
         ];

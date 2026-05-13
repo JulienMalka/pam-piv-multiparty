@@ -31,7 +31,7 @@ let
 
   moduleArgs = [
     "authfile=${authfilePath}"
-    "groups=${lib.concatStringsSep "," cfg.groupOrder}"
+    "groups=${lib.concatStringsSep "," cfg.groups}"
     "pkcs11_module=${cfg.pkcs11Module}"
   ]
   ++ lib.optional cfg.debug "debug";
@@ -48,16 +48,18 @@ in
     security.pam.multiparty = {
       enable = lib.mkEnableOption "PIV-based multi-party authentication";
 
-      groupOrder = lib.mkOption {
+      groups = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [
           "A"
           "B"
         ];
         description = ''
-          Ordered list of group names every authenticating user must
-          satisfy at login. Each user listed in `entries` must have at
-          least one matching entry per group declared here.
+          Group names every authenticating user must satisfy at login.
+          Each user listed in `entries` must have at least one matching
+          entry per group declared here. The list order is the order in
+          which the PAM module prompts for each group's card; it has no
+          effect on which credentials are accepted.
         '';
       };
 
@@ -68,7 +70,7 @@ in
               options = {
                 group = lib.mkOption {
                   type = lib.types.str;
-                  description = "Group name; must appear in `groupOrder`.";
+                  description = "Group name; must appear in `groups`.";
                 };
                 spki = lib.mkOption {
                   type = lib.types.str;
@@ -101,7 +103,7 @@ in
         description = ''
           Authfile entries, keyed by unix username. Every user listed
           here must have at least one entry per group declared in
-          `groupOrder`.
+          `groups`.
         '';
       };
 
@@ -194,13 +196,13 @@ in
           let
             userGroups = lib.unique (map (e: e.group) userEntries);
           in
-          lib.subtractLists userGroups cfg.groupOrder != [ ]
+          lib.subtractLists userGroups cfg.groups != [ ]
         ) cfg.entries;
       in
       [
         {
-          assertion = builtins.length cfg.groupOrder >= 1;
-          message = "security.pam.multiparty.groupOrder must declare at least one group.";
+          assertion = builtins.length cfg.groups >= 1;
+          message = "security.pam.multiparty.groups must declare at least one group.";
         }
         {
           assertion = bypassRisk == { };
@@ -245,7 +247,7 @@ in
           assertion = usersWithMissingGroups == { };
           message = ''
             piv-multiparty: the following user(s) in `entries` are
-            missing entries for some group in `groupOrder`. Each user
+            missing entries for some group in `groups`. Each user
             must have at least one entry per declared group, otherwise
             their auth always fails at the missing group's stage:
 
@@ -253,7 +255,7 @@ in
               lib.mapAttrsToList (
                 user: userEntries:
                 let
-                  missing = lib.subtractLists (lib.unique (map (e: e.group) userEntries)) cfg.groupOrder;
+                  missing = lib.subtractLists (lib.unique (map (e: e.group) userEntries)) cfg.groups;
                 in
                 "  ${user}: missing groups ${lib.concatStringsSep ", " missing}"
               ) usersWithMissingGroups

@@ -20,7 +20,7 @@ Add the flake input, then enable the module on whichever PAM services should req
 
   security.pam.multiparty = {
     enable = true;
-    groupOrder = [ "A" "B" ];
+    groups = [ "A" "B" ];
     entries = {
       alice = [
         { group = "A"; spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+ONSB1e7..."; }  # card A
