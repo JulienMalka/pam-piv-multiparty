@@ -2,8 +2,12 @@
 //!
 //! ```jsonl
 //! {"user":"alice","group":"A","spki":"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."}
-//! {"user":"alice","group":"B","spki":"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."}
+//! {"user":"alice","group":"B","spki":"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...","require_pin":false}
 //! ```
+//!
+//! `require_pin` is optional and defaults to `true`. `false` marks a
+//! card enrolled with `--no-pin-code`: the module does not prompt and
+//! logs in with the PIV factory PIN instead.
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -30,6 +34,9 @@ pub struct Entry {
     /// DER-encoded SubjectPublicKeyInfo of the slot-9a public key the
     /// device presented at registration.
     pub spki_der: Vec<u8>,
+    /// Prompt the user for the card's PIN. `false` only for cards
+    /// enrolled with `--no-pin-code`.
+    pub require_pin: bool,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +44,12 @@ struct RawEntry {
     user: String,
     group: String,
     spki: String,
+    #[serde(default = "default_true")]
+    require_pin: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 pub fn load_for_user(path: &Path, user: &str) -> Result<Vec<Entry>, AuthfileError> {
@@ -76,6 +89,7 @@ fn parse_entries(contents: &str, user: &str) -> Result<Vec<Entry>, AuthfileError
         entries.push(Entry {
             group: raw.group,
             spki_der,
+            require_pin: raw.require_pin,
         });
     }
     if entries.is_empty() {
@@ -139,6 +153,31 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].group, "A");
         assert_eq!(entries[0].spki_der, FAKE_SPKI_BYTES);
+        assert!(entries[0].require_pin, "require_pin must default to true");
+    }
+
+    #[test]
+    fn parses_require_pin_false() {
+        let entries = parse_entries(
+            &format!(
+                r#"{{"user":"alice","group":"A","spki":"{FAKE_SPKI_B64}","require_pin":false}}"#
+            ),
+            "alice",
+        )
+        .unwrap();
+        assert!(!entries[0].require_pin);
+    }
+
+    #[test]
+    fn non_boolean_require_pin_errors() {
+        let err = parse_entries(
+            &format!(
+                r#"{{"user":"alice","group":"A","spki":"{FAKE_SPKI_B64}","require_pin":"no"}}"#
+            ),
+            "alice",
+        )
+        .unwrap_err();
+        assert!(matches!(err, AuthfileError::ParseError { .. }));
     }
 
     #[test]

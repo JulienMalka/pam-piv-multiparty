@@ -17,10 +17,16 @@ let
     lib.flatten (
       lib.mapAttrsToList (
         user: userEntries:
-        map (e: {
-          inherit user;
-          inherit (e) group spki;
-        }) userEntries
+        map (
+          e:
+          {
+            inherit user;
+            inherit (e) group spki;
+          }
+          # Only emitted when false, so configurations without PIN-less
+          # cards render a byte-identical authfile.
+          // lib.optionalAttrs (!e.requirePin) { require_pin = false; }
+        ) userEntries
       ) cfg.entries
     )
   );
@@ -81,6 +87,25 @@ in
 
                       openssl x509 -in slot9a.cert.pem -noout -pubkey \
                         | openssl pkey -pubin -outform DER | base64 -w0
+                  '';
+                };
+                requirePin = lib.mkOption {
+                  type = lib.types.bool;
+                  default = true;
+                  description = ''
+                    Prompt for the card's PIN at login. Set to `false`
+                    only for cards enrolled with
+                    `piv-multiparty-enroll --no-pin-code` (slot-9a PIN
+                    policy `never`, touch policy `always`, PIN left at
+                    the PIV factory default). The module then does not
+                    prompt and opens the PKCS#11 session with the factory
+                    PIN, so authentication is possession of the card
+                    plus a touch. **Anyone holding such a card can
+                    authenticate with it.**
+
+                    Do not set this for a card that has a real PIN: each
+                    login would submit the factory PIN, fail, and use up
+                    one of the card's PIN retries.
                   '';
                 };
               };

@@ -233,6 +233,85 @@
         machine.send_chars("exit\n")
         machine.wait_until_tty_matches("1", "login:")
 
+    AUTHFILE = "/var/lib/piv-multiparty/authfile"
+
+    def set_group_b(spki, require_pin):
+        """Replace group B's authfile entry."""
+        flag = "true" if require_pin else "false"
+        machine.succeed(
+            f"{{ jq -c 'select(.group==\"A\")' {AUTHFILE}; "
+            f"  jq -nc --arg s '{spki}' "
+            f"    '{{user:\"alice\",group:\"B\",spki:$s,require_pin:{flag}}}'; "
+            f"}} > {AUTHFILE}.tmp && mv {AUTHFILE}.tmp {AUTHFILE}"
+        )
+
+    with subtest("no-PIN enrolment: card B re-provisioned with PIN policy never"):
+        # Same steps as `piv-multiparty-enroll --no-pin-code`, minus the
+        # touch policy PivApplet cannot emulate: generate 9a with
+        # pin-policy=never and leave the PIN at the factory default.
+        # The self-signature is made WITHOUT verify-pin, proving the
+        # card itself no longer asks for one.
+        spki_b = machine.succeed(f"""set -eo pipefail
+            yubico-piv-tool -r '{card_b.reader}' -a generate -s 9a -A ECCP256 \
+                --pin-policy=never > /tmp/9a-nopin.pub.pem
+            yubico-piv-tool -r '{card_b.reader}' -a selfsign-certificate \
+                -s 9a -S '/CN=alice/' --valid-days 3650 \
+                < /tmp/9a-nopin.pub.pem > /tmp/9a-nopin.cert.pem
+            yubico-piv-tool -r '{card_b.reader}' -a import-certificate -s 9a \
+                < /tmp/9a-nopin.cert.pem
+            openssl x509 -in /tmp/9a-nopin.cert.pem -noout -pubkey \
+                | openssl pkey -pubin -outform DER | base64 -w0
+        """).strip()
+        set_group_b(spki_b, require_pin=False)
+        machine.log(machine.succeed(f"cat {AUTHFILE}"))
+
+    with subtest("PIN-less group B: pamtester succeeds with group A's PIN only"):
+        rc, out = pam_attempt("login", "alice", pins=[PIN])
+        machine.log(f"rc={rc} out={out!r}")
+        assert rc == 0, f"pamtester should succeed, got rc={rc}: {out}"
+        assert "successful" in out.lower(), out
+        assert "PIN for YubiKey in group B" not in out, f"unexpected PIN prompt: {out!r}"
+
+    with subtest("real login: PIN-less card is never asked for a PIN"):
+        machine.wait_until_tty_matches("1", "login:")
+        machine.send_chars("alice\n")
+        machine.wait_until_tty_matches("1", "PIN for YubiKey in group A:")
+        machine.send_chars(f"{PIN}\n")
+        # No second PIN is typed: were the module to prompt for group B,
+        # this command would be swallowed as a PIN and the login fail.
+        machine.send_chars("id -u > /tmp/login-uid-nopin\n")
+        machine.wait_until_succeeds("test -f /tmp/login-uid-nopin", timeout=60)
+        uid = machine.succeed("cat /tmp/login-uid-nopin").strip()
+        assert uid == "1000", f"expected uid 1000 after login, got {uid!r}"
+        screen = machine.get_tty_text("1")
+        assert "PIN for YubiKey in group B" not in screen, screen
+        machine.send_chars("exit\n")
+        machine.wait_until_tty_matches("1", "login:")
+
+    with subtest("require_pin=true on the same card still prompts and checks the PIN"):
+        # The authfile flag, not the card, decides whether to prompt.
+        set_group_b(spki_b, require_pin=True)
+        rc, out = pam_attempt("login", "alice", pins=[PIN, WRONG_PIN])
+        machine.log(f"rc={rc} out={out!r}")
+        assert "PIN for YubiKey in group B" in out, f"expected a PIN prompt for group B: {out!r}"
+        assert rc != 0, f"wrong PIN must fail: {out}"
+        rc, out = pam_attempt("login", "alice", pins=[PIN, PIN])
+        assert rc == 0, f"correct PIN must succeed: {out}"
+        set_group_b(spki_b, require_pin=False)
+
+    with subtest("PIN-less entry fails closed when the card's PIN is not the factory one"):
+        machine.succeed(
+            f"yubico-piv-tool -r '{card_b.reader}' -a change-pin -P {PIN} -N {WRONG_PIN}"
+        )
+        rc, out = pam_attempt("login", "alice", pins=[PIN])
+        machine.log(f"rc={rc} out={out!r}")
+        assert rc != 0, f"must fail when the factory PIN no longer opens the card: {out}"
+        machine.succeed(
+            f"yubico-piv-tool -r '{card_b.reader}' -a change-pin -P {WRONG_PIN} -N {PIN}"
+        )
+        rc, out = pam_attempt("login", "alice", pins=[PIN])
+        assert rc == 0, f"must succeed again once the factory PIN is restored: {out}"
+
     with subtest("group B card 'unplugged': auth fails closed"):
         card_b.unplug()
         # Give pcscd a moment to notice slot 1 went dead.
