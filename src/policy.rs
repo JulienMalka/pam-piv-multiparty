@@ -9,6 +9,12 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use thiserror::Error;
+use zeroize::Zeroizing;
+
+/// PIV factory-default PIN. Cards enrolled with `--no-pin-code` keep it:
+/// their slot-9a key has PIN policy `never`, so the PIN protects nothing,
+/// but PKCS#11 only exposes the private key after a successful login.
+const PIV_FACTORY_PIN: &[u8] = b"123456";
 
 #[derive(Debug, Error)]
 pub enum PolicyError {
@@ -118,11 +124,22 @@ fn run_group(
             continue;
         }
 
-        let prompt = format!("PIN for YubiKey in group {}: ", group);
-        let pin = prompt_pin(pamh, &prompt).map_err(|source| PolicyError::Conv {
-            group: group.to_string(),
-            source,
-        })?;
+        // If a card is registered twice for the group with conflicting
+        // flags, err on the side of asking for the PIN.
+        let require_pin = entries
+            .iter()
+            .filter(|e| e.group == group && e.spki_der == spki)
+            .any(|e| e.require_pin);
+
+        let pin = if require_pin {
+            let prompt = format!("PIN for YubiKey in group {}: ", group);
+            prompt_pin(pamh, &prompt).map_err(|source| PolicyError::Conv {
+                group: group.to_string(),
+                source,
+            })?
+        } else {
+            Zeroizing::new(PIV_FACTORY_PIN.to_vec())
+        };
 
         let mut challenge = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut challenge);

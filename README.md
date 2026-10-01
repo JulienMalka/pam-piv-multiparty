@@ -46,4 +46,17 @@ piv-multiparty-enroll -u alice -g A
 
 Copy the printed entry into your NixOS config and `nixos-rebuild switch`.
 
+### PIN-less enrolment (physical presence only)
+
+```bash
+piv-multiparty-enroll -u alice -g A --no-pin-code
+```
+
+`--no-pin-code` generates the slot-9a key with PIN policy `never` (touch policy stays `always`) and leaves the card's PIN at the PIV factory default. The printed entry carries `requirePin = false;`:
+
+```nix
+{ group = "A"; spki = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."; requirePin = false; }
+```
+
+At login the module then never prompts for that card's PIN: the user only touches the card. Default enrolment is unchanged and still requires PIN and touch; both kinds of card can be mixed across groups.
 
